@@ -206,24 +206,24 @@ function renderRows() {
     const status = proxy.enabled ? (proxy.last_status || "pending") : "off";
     const label = proxy.enabled ? (STATUS[proxy.last_status] || "ожидает") : "выключен";
     const kind = KIND[proxy.exit_ip_kind] || "";
-    return h("tr", { class: proxy.enabled ? "" : "dim", onclick: () => openDrawer(proxy.id) }, [
-      h("td", {}, [proxy.address || "—"]),
-      h("td", {}, [
+    return h("tr", { class: `${proxy.enabled ? "" : "dim"} st-${status}`.trim(), onclick: () => openDrawer(proxy.id) }, [
+      h("td", { class: "cell-address", "data-label": "Адрес" }, [proxy.address || "—"]),
+      h("td", { class: "cell-proxy", "data-label": "Прокси" }, [
         h("span", { class: "mono" }, [`${proxy.host}:${proxy.port}`]),
         proxy.name ? h("span", { class: "name" }, [proxy.name]) : null,
       ]),
-      h("td", {}, [
+      h("td", { class: "cell-status", "data-label": "Статус" }, [
         h("span", { class: `pill st-${status}` }, [h("i", { class: "dot" }), label]),
         proxy.fail_streak > 1 ? h("span", { class: "err" }, [`${proxy.fail_streak} подряд`]) : null,
         proxy.last_error ? h("span", { class: "err" }, [proxy.last_error]) : null,
       ]),
-      h("td", { class: "mono" }, [proxy.last_latency_ms == null ? "—" : proxy.last_latency_ms]),
-      h("td", { class: "mono" }, [
+      h("td", { class: "cell-ms mono", "data-label": "мс" }, [proxy.last_latency_ms == null ? "—" : proxy.last_latency_ms]),
+      h("td", { class: "cell-exit mono", "data-label": "Внешний IP" }, [
         proxy.last_exit_ip || "—",
         kind ? h("span", { class: "tag" }, [kind]) : null,
         proxy.exit_ip_changed && proxy.prev_exit_ip ? h("span", { class: "err" }, [`было ${proxy.prev_exit_ip}`]) : null,
       ]),
-      h("td", {}, [ago(proxy.last_checked_at)]),
+      h("td", { class: "cell-when", "data-label": "Проверка" }, [ago(proxy.last_checked_at)]),
     ]);
   }));
 }

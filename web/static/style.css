@@ -54,7 +54,7 @@ button:disabled { opacity: 0.55; cursor: default; }
 .hint { color: var(--muted); font-size: 14px; line-height: 1.45; }
 .dialog-actions { display: flex; gap: 8px; align-items: center; }
 .spacer { flex: 1; }
-dialog { color: var(--text); }
+dialog { color: var(--text); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow: auto; }
 dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
 
 .shell { height: 100%; width: 100%; min-width: 0; display: flex; flex-direction: column; }
@@ -135,10 +135,55 @@ tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
 .history li { display: grid; grid-template-columns: 92px 1fr auto; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 13px; }
 .import-result { color: var(--muted); font-size: 14px; }
 .import-result ul { margin: 8px 0; padding-left: 18px; color: var(--down); }
-.toast { position: fixed; bottom: 16px; left: 16px; background: var(--text); color: #151915; padding: 10px 12px; border-radius: 6px; z-index: 8; }
+.toast { position: fixed; bottom: 16px; left: 16px; right: 16px; width: fit-content; max-width: calc(100vw - 32px); background: var(--text); color: #151915; padding: 10px 12px; border-radius: 6px; z-index: 8; }
 
 @media (max-width: 800px) {
-  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .app-header, .toolbar { align-items: stretch; flex-direction: column; }
-  .header-actions { justify-content: flex-start; }
+  html, body { height: auto; min-height: 100%; overflow: auto; }
+  .shell { height: auto; min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
+  .app-header, .toolbar { align-items: stretch; flex-direction: column; padding-left: 12px; padding-right: 12px; }
+  .app-header { padding-top: max(14px, env(safe-area-inset-top)); }
+  .header-actions { display: grid; grid-template-columns: 1fr 1fr; justify-content: stretch; }
+  .header-actions button { min-height: 44px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 12px; padding-right: 12px; }
+  .groups { padding-left: 12px; padding-right: 12px; }
+  .group { min-width: 148px; }
+  .search { min-width: 0; width: 100%; }
+  .filters button, .checkline { min-height: 44px; }
+  .table-wrap { flex: none; overflow: visible; }
+  .table-wrap table { min-width: 0; }
+  thead { display: none; }
+  #rows tr {
+    display: grid;
+    gap: 6px;
+    margin: 10px 12px;
+    padding: 12px;
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-left-width: 3px;
+    border-radius: 8px;
+  }
+  #rows tr.st-online { border-left-color: var(--up); }
+  #rows tr.st-slow { border-left-color: var(--slow); }
+  #rows tr.st-offline, #rows tr.st-timeout, #rows tr.st-error { border-left-color: var(--down); }
+  #rows tr.st-auth { border-left-color: var(--auth); }
+  #rows td { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 2px 8px; align-items: start; padding: 0; border: 0; }
+  #rows td::before { content: attr(data-label); grid-column: 1; grid-row: 1; color: var(--muted); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+  #rows td > * { grid-column: 2; }
+  #rows .cell-address { display: block; font-weight: 600; }
+  #rows .cell-address::before { content: none; }
+  #rows .empty { display: block; text-align: center; }
+  #rows .empty::before { content: none; }
+  .err { max-width: none; }
+  .mono { white-space: normal; overflow-wrap: anywhere; }
+  .drawer { display: block; }
+  .drawer-card { width: 100%; height: 100%; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  .kv { grid-template-columns: 96px minmax(0, 1fr); }
+  .history li { grid-template-columns: minmax(0, 1fr) auto; }
+  .history li span:nth-child(2) { grid-column: 1 / -1; }
+  dialog { width: 100%; max-width: none; max-height: 100dvh; margin: 0; border-radius: 0; }
+  .dialog-actions { flex-wrap: wrap; }
+  .dialog-actions .spacer { display: none; }
+  .dialog-actions button { flex: 1 1 140px; min-height: 44px; }
+  input[type="password"], input[type="number"], input[type="url"], input[type="search"], input[type="file"] { font-size: 16px; }
+  .toast { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); width: auto; }
 }
