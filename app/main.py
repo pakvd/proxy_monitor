@@ -29,6 +29,12 @@ def _token(password: str) -> str:
     return hmac.new(password.encode(), b"proxy-monitor-session-v1", "sha256").hexdigest()
 
 
+def _cookie_secure() -> bool:
+    if os.environ.get("MONITOR_COOKIE_SECURE", "") == "1":
+        return True
+    return os.environ.get("MONITOR_HTTPS", "") == "1"
+
+
 def _authenticated(request: Request) -> bool:
     password = monitor_password()
     if not password:
@@ -127,7 +133,7 @@ async def login(request: Request) -> JSONResponse:
         _token(password),
         httponly=True,
         samesite="lax",
-        secure=os.environ.get("MONITOR_COOKIE_SECURE", "") == "1",
+        secure=_cookie_secure(),
         max_age=60 * 60 * 24 * 7,
     )
     return response
@@ -139,7 +145,7 @@ def logout() -> JSONResponse:
     response.delete_cookie(
         COOKIE,
         samesite="lax",
-        secure=os.environ.get("MONITOR_COOKIE_SECURE", "") == "1",
+        secure=_cookie_secure(),
     )
     return response
 

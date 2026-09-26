@@ -13,6 +13,8 @@ class ApiTests(unittest.TestCase):
         os.environ["MONITOR_AUTOSTART"] = "0"
         os.environ["MONITOR_PASSWORD"] = ""
         os.environ["MONITOR_ALLOWLIST"] = ""
+        os.environ["MONITOR_HTTPS"] = ""
+        os.environ["MONITOR_COOKIE_SECURE"] = ""
         from app.access import guard
         guard.reset()
 
