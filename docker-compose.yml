@@ -1,0 +1,16 @@
+services:
+  monitor:
+    build: .
+    image: proxy-monitor
+    container_name: proxy-monitor
+    ports:
+      - "8080:8080"
+    environment:
+      DATA_DIR: /data
+      MONITOR_PASSWORD: ${MONITOR_PASSWORD:-}
+      MONITOR_SECRET: ${MONITOR_SECRET:-}
+      MONITOR_ALLOWLIST: ${MONITOR_ALLOWLIST:-}
+      MONITOR_COOKIE_SECURE: ${MONITOR_COOKIE_SECURE:-0}
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Мониторинг прокси</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='2' fill='%23101310'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%23b6d36a'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css?v=3">
+</head>
+<body>
+  <section id="login-view" class="gate hidden">
+    <form id="login-form" class="gate-card">
+      <p class="eyebrow">мониторинг прокси</p>
+      <h1>Вход</h1>
+      <label>
+        Пароль панели
+        <input id="login-password" type="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit">Войти</button>
+      <p id="login-error" class="form-error"></p>
+    </form>
+    <div id="blocked-note" class="gate-card hidden">
+      <p class="eyebrow">мониторинг прокси</p>
+      <h1>Доступ закрыт</h1>
+      <p id="blocked-text" class="form-error"></p>
+    </div>
+  </section>
+
+  <div id="app-view" class="shell hidden">
+    <header class="app-header">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"></span>
+        <div>
+          <h1>Мониторинг прокси</h1>
+          <p id="round-label">загрузка…</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="check-now" type="button">Проверить сейчас</button>
+        <button id="open-import" type="button" class="primary">Загрузить Excel</button>
+        <button id="export-xlsx" type="button">Скачать</button>
+        <button id="open-settings" type="button">Настройки</button>
+        <button id="logout" type="button" hidden>Выйти</button>
+      </div>
+    </header>
+
+    <div id="banner" class="banner hidden"></div>
+    <section id="stats" class="stats"></section>
+    <section id="groups" class="groups"></section>
+
+    <div class="toolbar">
+      <div id="filters" class="filters"></div>
+      <label class="search">
+        <span class="sr">Поиск</span>
+        <input id="search" type="search" placeholder="ip, порт, адрес, внешний ip" autocomplete="off">
+      </label>
+      <label class="checkline">
+        <input id="problems-first" type="checkbox" checked>
+        Сначала проблемы
+      </label>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Адрес</th>
+            <th>Прокси</th>
+            <th>Статус</th>
+            <th>мс</th>
+            <th>Внешний IP</th>
+            <th>Проверка</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <aside id="drawer" class="drawer hidden" aria-hidden="true">
+    <div class="drawer-card">
+      <button id="drawer-close" type="button" class="icon-btn" aria-label="Закрыть">×</button>
+      <div id="drawer-body"></div>
+    </div>
+  </aside>
+
+  <dialog id="import-dialog">
+    <form id="import-form" method="dialog">
+      <h2>Список прокси</h2>
+      <p class="hint">Колонки: ip, port, login, password, address. Необязательно: name, protocol. После загрузки логин и пароль нельзя посмотреть и нельзя скачать.</p>
+      <p class="hint"><a href="/api/template.xlsx">Скачать шаблон</a></p>
+      <label class="file">
+        Файл .xlsx
+        <input id="import-file" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+      </label>
+      <label class="checkline">
+        <input id="replace-missing" type="checkbox">
+        Удалить прокси, которых нет в файле
+      </label>
+      <div id="import-result" class="import-result"></div>
+      <div class="dialog-actions">
+        <button type="button" id="import-cancel">Отмена</button>
+        <button type="submit" class="primary">Загрузить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settings-dialog">
+    <form id="settings-form">
+      <h2>Проверка</h2>
+      <p class="hint">Запрос уходит с этого сервера на ip:port прокси, дальше через VLAN в модем и в интернет. Если порт закрыт из-за планового перезапуска, проверка подождёт и повторит попытку.</p>
+      <label>Интервал, секунды<input id="set-interval" type="number" min="15" max="3600" required></label>
+      <label>Ожидание перезапуска, секунды<input id="set-grace" type="number" min="0" max="120" required></label>
+      <label>Таймаут ответа, секунды<input id="set-timeout" type="number" min="3" max="60" required></label>
+      <label>Одновременно<input id="set-concurrency" type="number" min="1" max="100" required></label>
+      <label>Медленно, если дольше мс<input id="set-slow" type="number" min="100" max="60000" required></label>
+      <label>URL проверки<input id="set-url" type="url" required></label>
+      <p id="settings-error" class="form-error"></p>
+      <div class="dialog-actions">
+        <button type="button" id="wipe" class="danger">Очистить список</button>
+        <span class="spacer"></span>
+        <button type="button" id="settings-cancel">Закрыть</button>
+        <button type="submit" class="primary">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/static/app.js?v=7"></script>
+</body>
+</html>
