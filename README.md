@@ -132,13 +132,15 @@ MONITOR_AGENT_TOKEN=$(openssl rand -hex 24)
 
 После правки `.env` выполните `docker compose up -d`.
 
-На каждой ферме API модема уже лежит локально. Туда же кладётся служба. Один агент обходит все модемы этого сервера: для `192.168.1.1`–`192.168.50.1` в `agent.json` достаточно `modem_from`, `modem_to` и общего логина. На каждый адрес он вызывает `netmode.py` отдельно. Перезагрузка — та же команда, что одна строка ручного цикла: `python3 /home/pak/huawei-api/examples/reboot.py http://admin:пароль@192.168.N.1`. Запускается только молчащий модем, остальные адреса на сервере не трогаются. Имя фермы совпадает с колонкой `address`. В колонке `name` у прокси пишется IP его модема, например `192.168.12.1`. Пароль модема остаётся только в `agent.json`, в том же виде, что в bash после кавычек.
+На каждой ферме API модема уже лежит локально. Туда же кладётся служба. Один агент обходит все модемы этого сервера: для `192.168.1.1`–`192.168.50.1` в `agent.json` достаточно `modem_from`, `modem_to` и общего логина. Диапазон с другим паролем добавляется в `ranges`: у него свои `modem_from`, `modem_to` и `api_password`, логин берётся общий, если свой не указан. На пересечении адресов остаётся пароль из более позднего диапазона. На каждый адрес он вызывает `netmode.py` отдельно. Перезагрузка — та же команда, что одна строка ручного цикла: `python3 /home/pak/huawei-api/examples/reboot.py http://admin:пароль@192.168.N.1`. Запускается только молчащий модем, остальные адреса на сервере не трогаются. Имя фермы совпадает с колонкой `address`. В колонке `name` у прокси пишется IP его модема, например `192.168.12.1`. Пароль модема остаётся только в `agent.json`, в том же виде, что в bash после кавычек.
 
 ```bash
 sudo mkdir -p /etc/proxy-monitor
 sudo cp agent/agent.json.example /etc/proxy-monitor/agent.json
 sudo cp agent/farm_agent.py /home/pak/huawei-api/farm_agent.py
 sudo cp agent/farm-agent.service /etc/systemd/system/farm-agent.service
+sudo chown pak:pak /etc/proxy-monitor /etc/proxy-monitor/agent.json
+sudo chmod 700 /etc/proxy-monitor
 sudo chmod 600 /etc/proxy-monitor/agent.json
 ```
 

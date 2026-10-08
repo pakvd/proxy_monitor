@@ -10,5 +10,12 @@
   "api_password": "ПАРОЛЬ_МОДЕМА",
   "modem_from": 1,
   "modem_to": 50,
-  "modem_template": "192.168.{n}.1"
+  "modem_template": "192.168.{n}.1",
+  "ranges": [
+    {
+      "modem_from": 41,
+      "modem_to": 50,
+      "api_password": "ДРУГОЙ_ПАРОЛЬ"
+    }
+  ]
 }

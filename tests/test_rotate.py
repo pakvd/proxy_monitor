@@ -37,6 +37,32 @@ class ModemListTests(unittest.TestCase):
         self.assertIn("192.168.12.1", modems[11]["api"])
         self.assertEqual(modems[0]["api"], "http://admin:@x!@192.168.1.1")
 
+    def test_a_later_range_replaces_the_password(self):
+        from agent.farm_agent import expand_modems
+
+        modems = expand_modems({
+            "api_user": "admin",
+            "api_password": "shared",
+            "modem_from": 1,
+            "modem_to": 5,
+            "modem_template": "192.168.{n}.1",
+            "ranges": [
+                {"modem_from": 3, "modem_to": 4, "api_password": "@other!"},
+            ],
+        })
+        by_name = {item["name"]: item["api"] for item in modems}
+        self.assertEqual([item["name"] for item in modems], [
+            "192.168.1.1",
+            "192.168.2.1",
+            "192.168.3.1",
+            "192.168.4.1",
+            "192.168.5.1",
+        ])
+        self.assertEqual(by_name["192.168.2.1"], "http://admin:shared@192.168.2.1")
+        self.assertEqual(by_name["192.168.3.1"], "http://admin:@other!@192.168.3.1")
+        self.assertEqual(by_name["192.168.4.1"], "http://admin:@other!@192.168.4.1")
+        self.assertEqual(by_name["192.168.5.1"], "http://admin:shared@192.168.5.1")
+
     def test_reboot_calls_the_same_script_as_the_manual_loop(self):
         from agent.farm_agent import reboot_command
 

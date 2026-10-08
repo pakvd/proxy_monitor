@@ -16,6 +16,8 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Optional
+
+
 def band_command(python: str, netmode: str, api: str, bands: list[int]) -> list[str]:
     command = [python, netmode, api, "--mode", "4g"]
     for band in bands:
@@ -37,18 +39,51 @@ def modem_url(user: str, password: str, host: str) -> str:
 
 
 def expand_modems(data: dict[str, Any]) -> list[dict[str, str]]:
-    """Один пароль на все модемы фермы. Имя модема — его IP, его же пишут в колонку name."""
+    """Общий пароль на диапазон фермы, а в ranges — свои пароли на другие диапазоны.
+
+    Имя модема — его IP, его же пишут в колонку name. Более поздний диапазон
+    заменяет пароль на пересечении адресов. Отдельный модем в modems заменяет и его.
+    """
     user = str(data.get("api_user", ""))
     password = str(data.get("api_password", ""))
+    template = str(data.get("modem_template") or "192.168.{n}.1")
     found: list[dict[str, str]] = []
-    seen: set[str] = set()
+    index: dict[str, int] = {}
 
-    def add(name: str, api: str) -> None:
+    def put(name: str, api: str) -> None:
         name = name.strip()
-        if not name or name in seen:
+        if not name:
             return
-        seen.add(name)
-        found.append({"name": name, "api": api})
+        slot = index.get(name)
+        if slot is None:
+            index[name] = len(found)
+            found.append({"name": name, "api": api})
+            return
+        found[slot]["api"] = api
+
+    def add_range(spec: dict[str, Any]) -> None:
+        if spec.get("modem_from") is None or spec.get("modem_to") is None:
+            raise SystemExit("у диапазона нужны modem_from и modem_to")
+        start = int(spec["modem_from"])
+        stop = int(spec["modem_to"])
+        if stop < start or stop - start > 99:
+            raise SystemExit("диапазон модемов: от меньшего к большему, не больше 100 адресов")
+        range_user = str(spec["api_user"]) if spec.get("api_user") else user
+        range_password = str(spec["api_password"]) if "api_password" in spec else password
+        range_template = str(spec.get("modem_template") or template)
+        if not range_user:
+            raise SystemExit("для диапазона модемов нужен api_user")
+        for number in range(start, stop + 1):
+            host = range_template.format(n=number)
+            put(host, modem_url(range_user, range_password, host))
+
+    if data.get("modem_from") is not None or data.get("modem_to") is not None:
+        add_range(data)
+    raw_ranges = data.get("ranges") or []
+    if isinstance(raw_ranges, list):
+        for spec in raw_ranges:
+            if isinstance(spec, dict):
+                add_range(spec)
 
     raw = data.get("modems") or []
     if isinstance(raw, list):
@@ -57,31 +92,21 @@ def expand_modems(data: dict[str, Any]) -> list[dict[str, str]]:
                 host = item.strip()
                 if not user:
                     raise SystemExit("для списка IP нужен api_user")
-                add(host, modem_url(user, password, host))
+                put(host, modem_url(user, password, host))
             elif isinstance(item, dict):
                 host = str(item.get("host") or item.get("ip") or "").strip()
                 name = str(item.get("name") or host).strip()
                 api = str(item.get("api") or "")
                 if not api:
-                    if not host or not user:
+                    item_user = str(item["api_user"]) if item.get("api_user") else user
+                    item_password = str(item["api_password"]) if "api_password" in item else password
+                    if not host or not item_user:
                         raise SystemExit("у модема нужен api или host вместе с api_user")
-                    api = modem_url(user, password, host)
-                add(name, api)
-
-    if data.get("modem_from") is not None or data.get("modem_to") is not None:
-        if not user:
-            raise SystemExit("для диапазона модемов нужен api_user")
-        start = int(data["modem_from"])
-        stop = int(data["modem_to"])
-        if stop < start or stop - start > 99:
-            raise SystemExit("диапазон модемов: от меньшего к большему, не больше 100 адресов")
-        template = str(data.get("modem_template") or "192.168.{n}.1")
-        for number in range(start, stop + 1):
-            host = template.format(n=number)
-            add(host, modem_url(user, password, host))
+                    api = modem_url(item_user, item_password, host)
+                put(name, api)
 
     if not found:
-        raise SystemExit("в agent.json нужен список modems или диапазон modem_from/modem_to")
+        raise SystemExit("в agent.json нужен список modems, диапазон modem_from/modem_to или ranges")
     return found
 
 
