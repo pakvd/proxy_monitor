@@ -39,7 +39,7 @@ a { color: var(--up); }
 #blocked-text { margin-top: 12px; }
 .eyebrow { margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em; font-size: 11px; }
 .gate-card label, dialog label, .checkline { display: grid; gap: 6px; margin: 14px 0; font-size: 14px; }
-input[type="password"], input[type="number"], input[type="url"], input[type="search"], input[type="file"] {
+input[type="password"], input[type="number"], input[type="url"], input[type="search"], input[type="file"], input[type="text"] {
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--line);
@@ -184,6 +184,6 @@ tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
   .dialog-actions { flex-wrap: wrap; }
   .dialog-actions .spacer { display: none; }
   .dialog-actions button { flex: 1 1 140px; min-height: 44px; }
-  input[type="password"], input[type="number"], input[type="url"], input[type="search"], input[type="file"] { font-size: 16px; }
+  input[type="password"], input[type="number"], input[type="url"], input[type="search"], input[type="file"], input[type="text"] { font-size: 16px; }
   .toast { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); width: auto; }
 }

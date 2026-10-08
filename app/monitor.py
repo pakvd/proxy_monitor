@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from app.checker import check_through_restart, utcnow
 from app.db import Database
+from app.rotate import failure_hidden
 
 logger = logging.getLogger("proxy_monitor")
 
@@ -65,6 +66,7 @@ class Monitor:
                 settings = self.db.get_settings()
                 proxies = self.db.list_enabled_secrets()
                 semaphore = asyncio.Semaphore(int(settings["concurrency"]))
+                seen = self.db.latest_agent_seen()
 
                 async def one(proxy: dict[str, Any]) -> None:
                     async with semaphore:
@@ -76,6 +78,18 @@ class Monitor:
                             settings,
                             should_stop=self.stop.is_set,
                         )
+                        if result.status in {"offline", "timeout"} and failure_hidden(
+                            settings,
+                            time.time(),
+                            seen,
+                            self.db.hold_until(proxy.get("address") or "", proxy.get("name") or ""),
+                        ):
+                            logger.info(
+                                "%s:%s смена диапазона или перезагрузка модема, простой не засчитан",
+                                proxy["host"],
+                                proxy["port"],
+                            )
+                            return
                         self.db.save_check(int(proxy["id"]), result)
                         if previous != result.status:
                             suffix = f" ({result.error})" if result.error else ""
@@ -107,6 +121,13 @@ class Monitor:
         proxy = self.db.get_secret(proxy_id)
         if proxy is None:
             return None
-        result = await check_through_restart(proxy, self.db.get_settings())
-        self.db.save_check(proxy_id, result)
+        settings = self.db.get_settings()
+        result = await check_through_restart(proxy, settings)
+        if result.status not in {"offline", "timeout"} or not failure_hidden(
+            settings,
+            time.time(),
+            self.db.latest_agent_seen(),
+            self.db.hold_until(proxy.get("address") or "", proxy.get("name") or ""),
+        ):
+            self.db.save_check(proxy_id, result)
         return self.db.get_public(proxy_id)

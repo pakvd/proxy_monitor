@@ -1,0 +1,14 @@
+{
+  "monitor": "https://АДРЕС_МОНИТОРА:8080",
+  "token": "тот же MONITOR_AGENT_TOKEN, что на мониторе",
+  "insecure": true,
+  "farm": "farm-01",
+  "netmode": "/home/pak/huawei-api/netmode.py",
+  "reboot": "/home/pak/huawei-api/examples/reboot.py",
+  "python": "python3",
+  "api_user": "admin",
+  "api_password": "ПАРОЛЬ_МОДЕМА",
+  "modem_from": 1,
+  "modem_to": 50,
+  "modem_template": "192.168.{n}.1"
+}

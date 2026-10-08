@@ -101,15 +101,40 @@ class Database:
                     concurrency INTEGER NOT NULL,
                     check_url TEXT NOT NULL,
                     slow_ms INTEGER NOT NULL,
-                    restart_grace_sec INTEGER NOT NULL DEFAULT 30
+                    restart_grace_sec INTEGER NOT NULL DEFAULT 30,
+                    rotate_interval_min INTEGER NOT NULL DEFAULT 30,
+                    rotate_hold_sec INTEGER NOT NULL DEFAULT 90,
+                    rotate_bands_a TEXT NOT NULL DEFAULT '1,7,20',
+                    rotate_bands_b TEXT NOT NULL DEFAULT '1,3,20',
+                    reboot_after_min INTEGER NOT NULL DEFAULT 30,
+                    rotate_force INTEGER NOT NULL DEFAULT 0,
+                    rotate_enabled INTEGER NOT NULL DEFAULT 1
+                );
+
+                CREATE TABLE IF NOT EXISTS modem_state (
+                    farm TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    last_seen_at TEXT,
+                    last_reboot_at TEXT,
+                    hold_until TEXT,
+                    PRIMARY KEY (farm, name)
                 );
                 """
             )
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(settings)")}
-            if "restart_grace_sec" not in columns:
-                conn.execute(
-                    "ALTER TABLE settings ADD COLUMN restart_grace_sec INTEGER NOT NULL DEFAULT 30"
-                )
+            additions = {
+                "restart_grace_sec": "INTEGER NOT NULL DEFAULT 30",
+                "rotate_interval_min": "INTEGER NOT NULL DEFAULT 30",
+                "rotate_hold_sec": "INTEGER NOT NULL DEFAULT 90",
+                "rotate_bands_a": "TEXT NOT NULL DEFAULT '1,7,20'",
+                "rotate_bands_b": "TEXT NOT NULL DEFAULT '1,3,20'",
+                "reboot_after_min": "INTEGER NOT NULL DEFAULT 30",
+                "rotate_force": "INTEGER NOT NULL DEFAULT 0",
+                "rotate_enabled": "INTEGER NOT NULL DEFAULT 1",
+            }
+            for name, declaration in additions.items():
+                if name not in columns:
+                    conn.execute(f"ALTER TABLE settings ADD COLUMN {name} {declaration}")
             conn.execute(
                 """
                 INSERT INTO settings (
@@ -137,7 +162,8 @@ class Database:
                 """
                 UPDATE settings
                 SET interval_sec = ?, timeout_sec = ?, concurrency = ?, check_url = ?, slow_ms = ?,
-                    restart_grace_sec = ?
+                    restart_grace_sec = ?, rotate_interval_min = ?, rotate_hold_sec = ?,
+                    rotate_bands_a = ?, rotate_bands_b = ?, reboot_after_min = ?, rotate_enabled = ?
                 WHERE id = 1
                 """,
                 (
@@ -147,9 +173,84 @@ class Database:
                     str(values["check_url"]),
                     int(values["slow_ms"]),
                     int(values["restart_grace_sec"]),
+                    int(values["rotate_interval_min"]),
+                    int(values["rotate_hold_sec"]),
+                    str(values["rotate_bands_a"]),
+                    str(values["rotate_bands_b"]),
+                    int(values["reboot_after_min"]),
+                    int(values["rotate_enabled"]),
                 ),
             )
         return self.get_settings()
+
+    def bump_rotation(self) -> int:
+        with self._lock, _connect(self.path) as conn:
+            conn.execute("UPDATE settings SET rotate_force = rotate_force + 1 WHERE id = 1")
+            row = conn.execute("SELECT rotate_force FROM settings WHERE id = 1").fetchone()
+        return int(row["rotate_force"])
+
+    def modem_rows(self, farm: str) -> dict[str, dict[str, Any]]:
+        with self._lock, _connect(self.path) as conn:
+            rows = conn.execute(
+                "SELECT * FROM modem_state WHERE farm = ?",
+                (farm,),
+            ).fetchall()
+        return {row["name"]: dict(row) for row in rows}
+
+    def latest_agent_seen(self) -> Optional[str]:
+        with self._lock, _connect(self.path) as conn:
+            row = conn.execute("SELECT MAX(last_seen_at) AS seen FROM modem_state").fetchone()
+        return row["seen"] if row else None
+
+    def agent_farms(self) -> list[dict[str, Any]]:
+        with self._lock, _connect(self.path) as conn:
+            rows = conn.execute(
+                """
+                SELECT farm, COUNT(*) AS modems, MAX(last_seen_at) AS last_seen_at
+                FROM modem_state
+                GROUP BY farm
+                ORDER BY farm
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def note_agent(self, farm: str, names: list[str], reboot: list[str], hold_sec: int, hold_names: Optional[list[str]] = None) -> None:
+        now = utcnow()
+        hold = (datetime.now(timezone.utc) + timedelta(seconds=hold_sec)).isoformat(timespec="seconds")
+        paused = set(reboot) | set(hold_names or [])
+        with self._lock, _connect(self.path) as conn:
+            for name in names:
+                conn.execute(
+                    """
+                    INSERT INTO modem_state (farm, name, last_seen_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(farm, name) DO UPDATE SET last_seen_at = excluded.last_seen_at
+                    """,
+                    (farm, name, now),
+                )
+                if name in paused:
+                    if name in reboot:
+                        conn.execute(
+                            """
+                            UPDATE modem_state
+                            SET last_reboot_at = ?, hold_until = ?
+                            WHERE farm = ? AND name = ?
+                            """,
+                            (now, hold, farm, name),
+                        )
+                    else:
+                        conn.execute(
+                            "UPDATE modem_state SET hold_until = ? WHERE farm = ? AND name = ?",
+                            (hold, farm, name),
+                        )
+
+    def hold_until(self, farm: str, name: str) -> Optional[str]:
+        with self._lock, _connect(self.path) as conn:
+            row = conn.execute(
+                "SELECT hold_until FROM modem_state WHERE farm = ? AND name = ?",
+                (farm, name),
+            ).fetchone()
+        return row["hold_until"] if row else None
 
     def upsert_proxy(self, row: dict[str, Any]) -> str:
         now = utcnow()

@@ -1,0 +1,15 @@
+[Unit]
+Description=Смена диапазонов и перезагрузка модемов по команде монитора
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pak
+Environment=AGENT_CONFIG=/etc/proxy-monitor/agent.json
+ExecStart=/usr/bin/python3 /home/pak/huawei-api/farm_agent.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

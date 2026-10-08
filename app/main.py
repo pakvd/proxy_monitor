@@ -4,6 +4,7 @@ import asyncio
 import hmac
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import urlparse
@@ -13,7 +14,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.access import allowed, allowlist, guard
-from app.config import ROOT, VERSION, autostart, data_dir, monitor_password
+from app.config import ROOT, VERSION, agent_token, autostart, data_dir, monitor_password
+from app.rotate import decide, failure_hidden, format_bands, parse_bands, schedule
 from app.db import Database
 from app.importer import parse_xlsx, workbook_bytes
 from app.monitor import Monitor
@@ -33,6 +35,17 @@ def _cookie_secure() -> bool:
     if os.environ.get("MONITOR_COOKIE_SECURE", "") == "1":
         return True
     return os.environ.get("MONITOR_HTTPS", "") == "1"
+
+
+def _agent_authorized(request: Request) -> bool:
+    expected = agent_token()
+    if not expected:
+        return False
+    header = request.headers.get("authorization", "")
+    if not header.startswith("Bearer "):
+        return False
+    got = header.removeprefix("Bearer ").strip()
+    return hmac.compare_digest(_token(got), _token(expected))
 
 
 def _authenticated(request: Request) -> bool:
@@ -83,6 +96,11 @@ app.mount("/static", StaticFiles(directory=WEB / "static"), name="static")
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
     host = request.client.host if request.client else ""
+    if path.startswith("/api/agent/"):
+        if _agent_authorized(request):
+            return _harden(await call_next(request))
+        detail = "агенты не настроены" if not agent_token() else "неверный ключ агента"
+        return _harden(JSONResponse({"detail": detail}, status_code=401))
     if path != "/api/health" and not allowed(host):
         logger.warning("закрыт доступ с %s на %s", host or "неизвестный адрес", path)
         return _harden(JSONResponse({"detail": "доступ с этого адреса закрыт"}, status_code=403))
@@ -199,6 +217,7 @@ def overview(request: Request) -> dict[str, Any]:
         },
         "settings": database.get_settings(),
         "round": monitor.public_state(),
+        "rotation": _rotation_view(database),
     }
 
 
@@ -253,11 +272,68 @@ def export_xlsx(request: Request) -> Response:
     return _xlsx(workbook_bytes(rows), "proxies.xlsx")
 
 
+def _rotation_view(database: Database) -> dict[str, Any]:
+    settings = database.get_settings()
+    now = time.time()
+    clock = schedule(now, int(settings["rotate_interval_min"]))
+    bands = parse_bands(settings["rotate_bands_a"] if int(clock["slot"]) % 2 == 0 else settings["rotate_bands_b"])
+    return {
+        "enabled": bool(int(settings["rotate_enabled"])),
+        "interval_min": int(settings["rotate_interval_min"]),
+        "reboot_after_min": int(settings["reboot_after_min"]),
+        "bands": bands,
+        "next_slot_at": clock["next_slot_at"],
+        "in_hold": failure_hidden(settings, now, database.latest_agent_seen(), None),
+        "agents": database.agent_farms(),
+    }
+
+
+@app.post("/api/agent/sync")
+async def agent_sync(request: Request) -> dict[str, Any]:
+    payload = await request.json()
+    farm = str(payload.get("farm", "")).strip()
+    raw_modems = payload.get("modems")
+    if not farm or not isinstance(raw_modems, list) or not raw_modems:
+        raise HTTPException(400, "нужны ферма и модемы")
+    names = [str(item) for item in raw_modems]
+    database: Database = request.app.state.db
+    settings = database.get_settings()
+    known = database.modem_rows(farm)
+    applied = payload.get("applied_slot")
+    plan = decide(
+        now=time.time(),
+        settings=settings,
+        proxies=database.list_public(),
+        farm=farm,
+        modems=names,
+        applied_slot=int(applied) if applied is not None else None,
+        applied_force=int(payload.get("applied_force") or 0),
+        last_reboot={name: row.get("last_reboot_at") for name, row in known.items()},
+        hold_until={name: row.get("hold_until") for name, row in known.items()},
+    )
+    database.note_agent(farm, names, plan["reboot"], 180, names if plan["apply_bands"] else [])
+    if plan["apply_bands"] or plan["reboot"]:
+        logger.info(
+            "ферма %s: слот %s, диапазоны %s, перезагрузка %s",
+            farm,
+            plan["slot"],
+            format_bands(plan["bands"]),
+            ", ".join(plan["reboot"]) or "нет",
+        )
+    return plan
+
+
+@app.post("/api/rotation/kick")
+def rotation_kick(request: Request) -> dict[str, int]:
+    return {"force": request.app.state.db.bump_rotation()}
+
+
 @app.put("/api/settings")
 async def update_settings(request: Request) -> dict[str, Any]:
     payload = await request.json()
-    values = _validate_settings(payload)
-    return request.app.state.db.update_settings(values)
+    database: Database = request.app.state.db
+    values = _validate_settings(payload, database.get_settings())
+    return database.update_settings(values)
 
 
 @app.post("/api/check-now")
@@ -310,7 +386,7 @@ def delete_all(request: Request) -> dict[str, int]:
     return {"deleted": request.app.state.db.delete_all()}
 
 
-def _validate_settings(payload: dict[str, Any]) -> dict[str, Any]:
+def _validate_settings(payload: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     try:
         interval = int(payload["interval_sec"])
         timeout = int(payload["timeout_sec"])
@@ -318,6 +394,12 @@ def _validate_settings(payload: dict[str, Any]) -> dict[str, Any]:
         slow = int(payload["slow_ms"])
         grace = int(payload["restart_grace_sec"])
         check_url = str(payload["check_url"]).strip()
+        rotate_every = int(payload.get("rotate_interval_min", current["rotate_interval_min"]))
+        hold = int(payload.get("rotate_hold_sec", current["rotate_hold_sec"]))
+        reboot_after = int(payload.get("reboot_after_min", current["reboot_after_min"]))
+        rotate_enabled = int(payload.get("rotate_enabled", current["rotate_enabled"]))
+        bands_a = parse_bands(payload.get("rotate_bands_a", current["rotate_bands_a"]))
+        bands_b = parse_bands(payload.get("rotate_bands_b", current["rotate_bands_b"]))
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(400, "проверьте поля настроек") from exc
     if not 15 <= interval <= 3600:
@@ -330,6 +412,14 @@ def _validate_settings(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(400, "порог медленного ответа от 100 до 60000 мс")
     if not 0 <= grace <= 120:
         raise HTTPException(400, "ожидание перезапуска от 0 до 120 секунд")
+    if not 10 <= rotate_every <= 1440:
+        raise HTTPException(400, "смена диапазонов от 10 до 1440 минут")
+    if not 30 <= hold <= 300:
+        raise HTTPException(400, "окно смены от 30 до 300 секунд")
+    if not 0 <= reboot_after <= 1440:
+        raise HTTPException(400, "перезагрузка модема от 0 до 1440 минут")
+    if rotate_enabled not in {0, 1}:
+        raise HTTPException(400, "смена диапазонов включается или выключается")
     parsed = urlparse(check_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise HTTPException(400, "URL проверки должен начинаться с http:// или https://")
@@ -340,6 +430,12 @@ def _validate_settings(payload: dict[str, Any]) -> dict[str, Any]:
         "slow_ms": slow,
         "restart_grace_sec": grace,
         "check_url": check_url,
+        "rotate_interval_min": rotate_every,
+        "rotate_hold_sec": hold,
+        "rotate_bands_a": format_bands(bands_a),
+        "rotate_bands_b": format_bands(bands_b),
+        "reboot_after_min": reboot_after,
+        "rotate_enabled": rotate_enabled,
     }
 
 

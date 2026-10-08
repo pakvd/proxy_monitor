@@ -18,5 +18,9 @@ def monitor_password() -> str:
     return os.environ.get("MONITOR_PASSWORD", "")
 
 
+def agent_token() -> str:
+    return os.environ.get("MONITOR_AGENT_TOKEN", "").strip()
+
+
 def autostart() -> bool:
     return os.environ.get("MONITOR_AUTOSTART", "1") != "0"

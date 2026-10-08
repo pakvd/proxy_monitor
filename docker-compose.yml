@@ -13,6 +13,7 @@ services:
       MONITOR_HTTPS: ${MONITOR_HTTPS:-1}
       MONITOR_TLS_NAMES: ${MONITOR_TLS_NAMES:-}
       MONITOR_COOKIE_SECURE: ${MONITOR_COOKIE_SECURE:-1}
+      MONITOR_AGENT_TOKEN: ${MONITOR_AGENT_TOKEN:-}
     volumes:
       - ./data:/data
     restart: unless-stopped

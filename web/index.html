@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Мониторинг прокси</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='2' fill='%23101310'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%23b6d36a'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/style.css?v=6">
+  <link rel="stylesheet" href="/static/style.css?v=7">
 </head>
 <body>
   <section id="login-view" class="gate hidden">
@@ -33,6 +33,7 @@
         <div>
           <h1>Мониторинг прокси</h1>
           <p id="round-label">загрузка…</p>
+          <p id="rotate-label" class="sub"></p>
         </div>
       </div>
       <div class="header-actions">
@@ -115,8 +116,17 @@
       <label>Одновременно<input id="set-concurrency" type="number" min="1" max="100" required></label>
       <label>Медленно, если дольше мс<input id="set-slow" type="number" min="100" max="60000" required></label>
       <label>URL проверки<input id="set-url" type="url" required></label>
+      <h2>Модемы</h2>
+      <p class="hint">Служба на ферме забирает эти значения и сама меняет диапазоны LTE. Пока идёт смена или перезагрузка, простой не считается падением. Ноль у перезагрузки выключает её.</p>
+      <label class="checkline"><input id="set-rotate" type="checkbox" checked> Менять диапазоны</label>
+      <label>Интервал смены, минуты<input id="set-rotate-every" type="number" min="10" max="1440" required></label>
+      <label>Окно смены, секунды<input id="set-rotate-hold" type="number" min="30" max="300" required></label>
+      <label>Диапазоны A<input id="set-bands-a" type="text" required></label>
+      <label>Диапазоны B<input id="set-bands-b" type="text" required></label>
+      <label>Перезагрузка, если молчит минут<input id="set-reboot" type="number" min="0" max="1440" required></label>
       <p id="settings-error" class="form-error"></p>
       <div class="dialog-actions">
+        <button type="button" id="rotate-now">Сменить диапазоны сейчас</button>
         <button type="button" id="wipe" class="danger">Очистить список</button>
         <span class="spacer"></span>
         <button type="button" id="settings-cancel">Закрыть</button>
@@ -126,6 +136,6 @@
   </dialog>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="/static/app.js?v=8"></script>
+  <script src="/static/app.js?v=9"></script>
 </body>
 </html>

@@ -15,6 +15,7 @@ class ApiTests(unittest.TestCase):
         os.environ["MONITOR_ALLOWLIST"] = ""
         os.environ["MONITOR_HTTPS"] = ""
         os.environ["MONITOR_COOKIE_SECURE"] = ""
+        os.environ["MONITOR_AGENT_TOKEN"] = ""
         from app.access import guard
         guard.reset()
 

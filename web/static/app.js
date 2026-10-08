@@ -109,6 +109,25 @@ function matches(proxy) {
   return hay.includes(query);
 }
 
+function renderRotation() {
+  const rotation = state.data && state.data.rotation;
+  const label = $("rotate-label");
+  if (!rotation) {
+    label.textContent = "";
+    return;
+  }
+  if (!rotation.enabled) {
+    label.textContent = "смена диапазонов выключена";
+    return;
+  }
+  const bands = (rotation.bands || []).join("+");
+  const left = Math.max(0, Math.round(rotation.next_slot_at - Date.now() / 1000));
+  const minutes = Math.max(1, Math.round(left / 60));
+  const farms = (rotation.agents || []).map((agent) => agent.farm).filter(Boolean);
+  const link = farms.length ? `на связи ${farms.join(", ")}` : "служба ферм ещё не подключалась";
+  label.textContent = `диапазоны ${bands} каждые ${rotation.interval_min} мин, следующие через ${minutes} мин · ${link}`;
+}
+
 function renderRound() {
   const round = state.data && state.data.round;
   const label = $("round-label");
@@ -231,6 +250,7 @@ function renderRows() {
 function render() {
   if (!state.data) return;
   renderRound();
+  renderRotation();
   renderStats();
   renderGroups();
   renderFilters();
@@ -411,6 +431,12 @@ function openSettings() {
   $("set-concurrency").value = settings.concurrency;
   $("set-slow").value = settings.slow_ms;
   $("set-url").value = settings.check_url;
+  $("set-rotate").checked = Boolean(settings.rotate_enabled);
+  $("set-rotate-every").value = settings.rotate_interval_min;
+  $("set-rotate-hold").value = settings.rotate_hold_sec;
+  $("set-bands-a").value = settings.rotate_bands_a;
+  $("set-bands-b").value = settings.rotate_bands_b;
+  $("set-reboot").value = settings.reboot_after_min;
   $("settings-error").textContent = "";
   $("settings-dialog").showModal();
 }
@@ -467,6 +493,15 @@ $("import-form").addEventListener("submit", async (event) => {
 });
 
 $("export-xlsx").addEventListener("click", () => download("/api/export.xlsx", "proxies.xlsx"));
+$("rotate-now").addEventListener("click", async () => {
+  $("settings-error").textContent = "";
+  try {
+    await api("/api/rotation/kick", { method: "POST" });
+    $("settings-error").textContent = "фермы сменят диапазоны на следующем опросе";
+  } catch (error) {
+    $("settings-error").textContent = error.message;
+  }
+});
 $("open-settings").addEventListener("click", openSettings);
 $("settings-cancel").addEventListener("click", () => $("settings-dialog").close());
 $("settings-form").addEventListener("submit", async (event) => {
@@ -482,6 +517,12 @@ $("settings-form").addEventListener("submit", async (event) => {
         concurrency: Number($("set-concurrency").value),
         slow_ms: Number($("set-slow").value),
         check_url: $("set-url").value.trim(),
+        rotate_enabled: $("set-rotate").checked ? 1 : 0,
+        rotate_interval_min: Number($("set-rotate-every").value),
+        rotate_hold_sec: Number($("set-rotate-hold").value),
+        rotate_bands_a: $("set-bands-a").value.trim(),
+        rotate_bands_b: $("set-bands-b").value.trim(),
+        reboot_after_min: Number($("set-reboot").value),
       },
     });
     $("settings-dialog").close();
