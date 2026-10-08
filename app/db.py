@@ -108,7 +108,8 @@ class Database:
                     rotate_bands_b TEXT NOT NULL DEFAULT '1,3,20',
                     reboot_after_min INTEGER NOT NULL DEFAULT 30,
                     rotate_force INTEGER NOT NULL DEFAULT 0,
-                    rotate_enabled INTEGER NOT NULL DEFAULT 1
+                    rotate_enabled INTEGER NOT NULL DEFAULT 1,
+                    rotate_stagger INTEGER NOT NULL DEFAULT 0
                 );
 
                 CREATE TABLE IF NOT EXISTS modem_state (
@@ -131,6 +132,7 @@ class Database:
                 "reboot_after_min": "INTEGER NOT NULL DEFAULT 30",
                 "rotate_force": "INTEGER NOT NULL DEFAULT 0",
                 "rotate_enabled": "INTEGER NOT NULL DEFAULT 1",
+                "rotate_stagger": "INTEGER NOT NULL DEFAULT 0",
             }
             for name, declaration in additions.items():
                 if name not in columns:
@@ -163,7 +165,8 @@ class Database:
                 UPDATE settings
                 SET interval_sec = ?, timeout_sec = ?, concurrency = ?, check_url = ?, slow_ms = ?,
                     restart_grace_sec = ?, rotate_interval_min = ?, rotate_hold_sec = ?,
-                    rotate_bands_a = ?, rotate_bands_b = ?, reboot_after_min = ?, rotate_enabled = ?
+                    rotate_bands_a = ?, rotate_bands_b = ?, reboot_after_min = ?,
+                    rotate_enabled = ?, rotate_stagger = ?
                 WHERE id = 1
                 """,
                 (
@@ -179,6 +182,7 @@ class Database:
                     str(values["rotate_bands_b"]),
                     int(values["reboot_after_min"]),
                     int(values["rotate_enabled"]),
+                    int(values["rotate_stagger"]),
                 ),
             )
         return self.get_settings()

@@ -117,8 +117,9 @@
       <label>Медленно, если дольше мс<input id="set-slow" type="number" min="100" max="60000" required></label>
       <label>URL проверки<input id="set-url" type="url" required></label>
       <h2>Модемы</h2>
-      <p class="hint">Служба на ферме забирает эти значения и сама меняет диапазоны LTE. Пока идёт смена или перезагрузка, простой не считается падением. Ноль у перезагрузки выключает её.</p>
+      <p class="hint">Служба на ферме забирает эти значения и сама меняет диапазоны LTE. Пока идёт смена или перезагрузка, простой не считается падением. Ноль у перезагрузки выключает её. В шахматном порядке первая половина модемов меняет набор в начале интервала, вторая — в середине: пока одна уже на A, вторая ещё на B.</p>
       <label class="checkline"><input id="set-rotate" type="checkbox" checked> Менять диапазоны</label>
+      <label class="checkline"><input id="set-stagger" type="checkbox"> В шахматном порядке</label>
       <label>Интервал смены, минуты<input id="set-rotate-every" type="number" min="10" max="1440" required></label>
       <label>Окно смены, секунды<input id="set-rotate-hold" type="number" min="30" max="300" required></label>
       <label>Диапазоны A<input id="set-bands-a" type="text" required></label>
@@ -136,6 +137,6 @@
   </dialog>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="/static/app.js?v=9"></script>
+  <script src="/static/app.js?v=10"></script>
 </body>
 </html>

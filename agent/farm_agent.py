@@ -211,11 +211,34 @@ def sync_once(config: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
             "modems": [modem["name"] for modem in config["modems"]],
             "applied_slot": state.get("slot"),
             "applied_force": int(state.get("force") or 0),
+            "applied_even_wave": state.get("even_wave"),
+            "applied_odd_wave": state.get("odd_wave"),
         },
         bool(config.get("insecure")),
     )
     bands = [int(band) for band in plan.get("bands") or []]
-    if plan.get("apply_bands"):
+    if plan.get("stagger"):
+        halves = {"even": config["modems"][0::2], "odd": config["modems"][1::2]}
+        for group in plan.get("groups") or []:
+            if not group.get("apply"):
+                continue
+            group_id = str(group.get("id") or "")
+            subset = halves.get(group_id) or []
+            wave = group.get("wave")
+            if state.get(f"working_{group_id}") != wave or int(state.get("working_force") or 0) != int(plan.get("force") or 0):
+                state[f"done_{group_id}"] = []
+                state[f"working_{group_id}"] = wave
+                state["working_force"] = plan.get("force")
+            done = set(state.get(f"done_{group_id}") or [])
+            pending = [modem for modem in subset if modem["name"] not in done]
+            done.update(apply_bands(config, pending, [int(band) for band in group.get("bands") or []]))
+            state[f"done_{group_id}"] = sorted(done)
+            if len(done) == len(subset):
+                state[f"{group_id}_wave"] = wave
+        if not any(group.get("apply") for group in plan.get("groups") or []):
+            state["slot"] = plan["slot"]
+            state["force"] = plan["force"]
+    elif plan.get("apply_bands"):
         if state.get("working_slot") != plan.get("slot") or int(state.get("working_force") or 0) != int(plan.get("force") or 0):
             state["done"] = []
             state["working_slot"] = plan.get("slot")

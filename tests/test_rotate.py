@@ -200,6 +200,62 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(later["bands"], [1, 3, 20])
         self.assertTrue(later["apply_bands"])
 
+    def test_stagger_switches_half_the_modems_at_a_time(self):
+        settings = self.db.get_settings()
+        settings["rotate_enabled"] = 1
+        settings["rotate_stagger"] = 1
+        settings["rotate_interval_min"] = 30
+        names = ["m1", "m2", "m3", "m4"]
+        start = decide(
+            now=0,
+            settings=settings,
+            proxies=[],
+            farm="farm-01",
+            modems=names,
+            applied_slot=None,
+            applied_force=0,
+            last_reboot={},
+            hold_until={},
+        )
+        groups = {item["id"]: item for item in start["groups"]}
+        self.assertEqual(groups["even"]["bands"], [1, 7, 20])
+        self.assertEqual(groups["odd"]["bands"], [1, 3, 20])
+        self.assertTrue(groups["even"]["apply"])
+        self.assertTrue(groups["odd"]["apply"])
+        self.assertFalse(start["apply_bands"])
+        settled = decide(
+            now=0,
+            settings=settings,
+            proxies=[],
+            farm="farm-01",
+            modems=names,
+            applied_slot=None,
+            applied_force=0,
+            last_reboot={},
+            hold_until={},
+            applied_even_wave=groups["even"]["wave"],
+            applied_odd_wave=groups["odd"]["wave"],
+        )
+        self.assertEqual(settled["switch"], [])
+        midpoint = decide(
+            now=15 * 60,
+            settings=settings,
+            proxies=[],
+            farm="farm-01",
+            modems=names,
+            applied_slot=None,
+            applied_force=0,
+            last_reboot={},
+            hold_until={},
+            applied_even_wave=groups["even"]["wave"],
+            applied_odd_wave=groups["odd"]["wave"],
+        )
+        mid = {item["id"]: item for item in midpoint["groups"]}
+        self.assertFalse(mid["even"]["apply"])
+        self.assertTrue(mid["odd"]["apply"])
+        self.assertEqual(mid["odd"]["bands"], [1, 7, 20])
+        self.assertEqual(midpoint["switch"], ["m2", "m4"])
+
 
 if __name__ == "__main__":
     unittest.main()

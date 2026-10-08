@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.access import allowed, allowlist, guard
 from app.config import ROOT, VERSION, agent_token, autostart, data_dir, monitor_password
-from app.rotate import decide, failure_hidden, format_bands, parse_bands, schedule
+from app.rotate import decide, failure_hidden, format_bands, parse_bands, schedule, stagger_waves
 from app.db import Database
 from app.importer import parse_xlsx, workbook_bytes
 from app.monitor import Monitor
@@ -282,7 +282,10 @@ def _rotation_view(database: Database) -> dict[str, Any]:
         "interval_min": int(settings["rotate_interval_min"]),
         "reboot_after_min": int(settings["reboot_after_min"]),
         "bands": bands,
-        "next_slot_at": clock["next_slot_at"],
+        "bands_b": parse_bands(settings["rotate_bands_b"] if int(clock["slot"]) % 2 == 0 else settings["rotate_bands_a"]),
+        "stagger": bool(int(settings.get("rotate_stagger") or 0)),
+        "next_slot_at": stagger_waves(now, int(settings["rotate_interval_min"]))["next_wave_at"]
+        if int(settings.get("rotate_stagger") or 0) else clock["next_slot_at"],
         "in_hold": failure_hidden(settings, now, database.latest_agent_seen(), None),
         "agents": database.agent_farms(),
     }
@@ -300,6 +303,8 @@ async def agent_sync(request: Request) -> dict[str, Any]:
     settings = database.get_settings()
     known = database.modem_rows(farm)
     applied = payload.get("applied_slot")
+    even_wave = payload.get("applied_even_wave")
+    odd_wave = payload.get("applied_odd_wave")
     plan = decide(
         now=time.time(),
         settings=settings,
@@ -310,9 +315,12 @@ async def agent_sync(request: Request) -> dict[str, Any]:
         applied_force=int(payload.get("applied_force") or 0),
         last_reboot={name: row.get("last_reboot_at") for name, row in known.items()},
         hold_until={name: row.get("hold_until") for name, row in known.items()},
+        applied_even_wave=int(even_wave) if even_wave is not None else None,
+        applied_odd_wave=int(odd_wave) if odd_wave is not None else None,
     )
-    database.note_agent(farm, names, plan["reboot"], 180, names if plan["apply_bands"] else [])
-    if plan["apply_bands"] or plan["reboot"]:
+    switching = plan["switch"] if plan["stagger"] else (names if plan["apply_bands"] else [])
+    database.note_agent(farm, names, plan["reboot"], 180, switching)
+    if plan["apply_bands"] or plan["reboot"] or switching:
         logger.info(
             "ферма %s: слот %s, диапазоны %s, перезагрузка %s",
             farm,
@@ -398,6 +406,7 @@ def _validate_settings(payload: dict[str, Any], current: dict[str, Any]) -> dict
         hold = int(payload.get("rotate_hold_sec", current["rotate_hold_sec"]))
         reboot_after = int(payload.get("reboot_after_min", current["reboot_after_min"]))
         rotate_enabled = int(payload.get("rotate_enabled", current["rotate_enabled"]))
+        rotate_stagger = int(payload.get("rotate_stagger", current.get("rotate_stagger", 0)))
         bands_a = parse_bands(payload.get("rotate_bands_a", current["rotate_bands_a"]))
         bands_b = parse_bands(payload.get("rotate_bands_b", current["rotate_bands_b"]))
     except (KeyError, TypeError, ValueError) as exc:
@@ -420,6 +429,8 @@ def _validate_settings(payload: dict[str, Any], current: dict[str, Any]) -> dict
         raise HTTPException(400, "перезагрузка модема от 0 до 1440 минут")
     if rotate_enabled not in {0, 1}:
         raise HTTPException(400, "смена диапазонов включается или выключается")
+    if rotate_stagger not in {0, 1}:
+        raise HTTPException(400, "шахматный порядок включается или выключается")
     parsed = urlparse(check_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise HTTPException(400, "URL проверки должен начинаться с http:// или https://")
@@ -436,6 +447,7 @@ def _validate_settings(payload: dict[str, Any], current: dict[str, Any]) -> dict
         "rotate_bands_b": format_bands(bands_b),
         "reboot_after_min": reboot_after,
         "rotate_enabled": rotate_enabled,
+        "rotate_stagger": rotate_stagger,
     }
 
 

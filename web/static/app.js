@@ -125,6 +125,11 @@ function renderRotation() {
   const minutes = Math.max(1, Math.round(left / 60));
   const farms = (rotation.agents || []).map((agent) => agent.farm).filter(Boolean);
   const link = farms.length ? `на связи ${farms.join(", ")}` : "служба ферм ещё не подключалась";
+  if (rotation.stagger) {
+    const other = (rotation.bands_b || []).join("+");
+    label.textContent = `шахматный порядок ${bands} и ${other}, следующая половина через ${minutes} мин · ${link}`;
+    return;
+  }
   label.textContent = `диапазоны ${bands} каждые ${rotation.interval_min} мин, следующие через ${minutes} мин · ${link}`;
 }
 
@@ -432,6 +437,7 @@ function openSettings() {
   $("set-slow").value = settings.slow_ms;
   $("set-url").value = settings.check_url;
   $("set-rotate").checked = Boolean(settings.rotate_enabled);
+  $("set-stagger").checked = Boolean(settings.rotate_stagger);
   $("set-rotate-every").value = settings.rotate_interval_min;
   $("set-rotate-hold").value = settings.rotate_hold_sec;
   $("set-bands-a").value = settings.rotate_bands_a;
@@ -518,6 +524,7 @@ $("settings-form").addEventListener("submit", async (event) => {
         slow_ms: Number($("set-slow").value),
         check_url: $("set-url").value.trim(),
         rotate_enabled: $("set-rotate").checked ? 1 : 0,
+        rotate_stagger: $("set-stagger").checked ? 1 : 0,
         rotate_interval_min: Number($("set-rotate-every").value),
         rotate_hold_sec: Number($("set-rotate-hold").value),
         rotate_bands_a: $("set-bands-a").value.trim(),

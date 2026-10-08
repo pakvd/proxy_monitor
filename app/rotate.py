@@ -39,6 +39,25 @@ def bands_for_slot(slot: int, first: list[int], second: list[int]) -> list[int]:
     return first if int(slot) % 2 == 0 else second
 
 
+def stagger_waves(now: float, interval_min: int) -> dict[str, int]:
+    """Чётные модемы меняются в начале интервала, нечётные — в середине."""
+    interval = max(1, int(interval_min)) * 60
+    half = interval / 2
+    return {
+        "even": int(now // interval),
+        "odd": int((now - half) // interval),
+        "next_wave_at": int((int(now // half) + 1) * half),
+    }
+
+
+def _wave_due(applied_wave: Optional[int], wave: int, applied_force: int, force: int, enabled: bool) -> bool:
+    if not enabled:
+        return False
+    if applied_force < force:
+        return True
+    return applied_wave is None or int(applied_wave) != int(wave)
+
+
 def _stamp(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
@@ -64,6 +83,8 @@ def failure_hidden(
     moment = datetime.fromtimestamp(now, timezone.utc)
     if (_age(moment, hold_until) or 1) < 0:
         return True
+    if int(settings.get("rotate_stagger") or 0):
+        return False
     if not int(settings.get("rotate_enabled") or 0):
         return False
     seen = _age(moment, agent_last_seen)
@@ -121,6 +142,8 @@ def decide(
     applied_force: int,
     last_reboot: dict[str, Optional[str]],
     hold_until: dict[str, Optional[str]],
+    applied_even_wave: Optional[int] = None,
+    applied_odd_wave: Optional[int] = None,
 ) -> dict[str, Any]:
     moment = datetime.fromtimestamp(now, timezone.utc)
     enabled = bool(int(settings.get("rotate_enabled") or 0))
@@ -129,7 +152,36 @@ def decide(
     second = parse_bands(settings["rotate_bands_b"])
     slot = int(clock["slot"])
     force = int(settings.get("rotate_force") or 0)
-    apply = enabled and (applied_slot != slot or int(applied_force) < force)
+    stagger = enabled and bool(int(settings.get("rotate_stagger") or 0))
+    waves = stagger_waves(now, int(settings["rotate_interval_min"]))
+    even_names = modems[0::2]
+    odd_names = modems[1::2]
+    even_apply = stagger and bool(even_names) and _wave_due(
+        applied_even_wave, waves["even"], int(applied_force), force, enabled,
+    )
+    odd_apply = stagger and bool(odd_names) and _wave_due(
+        applied_odd_wave, waves["odd"], int(applied_force), force, enabled,
+    )
+    groups = [
+        {
+            "id": "even",
+            "wave": waves["even"],
+            "bands": bands_for_slot(waves["even"], first, second),
+            "apply": even_apply,
+        },
+        {
+            "id": "odd",
+            "wave": waves["odd"],
+            "bands": bands_for_slot(waves["odd"], first, second),
+            "apply": odd_apply,
+        },
+    ]
+    apply = (not stagger) and enabled and (applied_slot != slot or int(applied_force) < force)
+    switching: list[str] = []
+    if even_apply:
+        switching.extend(even_names)
+    if odd_apply:
+        switching.extend(odd_names)
     return {
         "farm": farm,
         "rotate_enabled": enabled,
@@ -140,8 +192,11 @@ def decide(
         "force": force,
         "bands": bands_for_slot(slot, first, second),
         "apply_bands": apply,
-        "in_hold": enabled and float(clock["phase"]) < int(settings["rotate_hold_sec"]),
-        "next_slot_at": clock["next_slot_at"],
+        "stagger": stagger,
+        "groups": groups if stagger else [],
+        "switch": switching,
+        "in_hold": (not stagger) and enabled and float(clock["phase"]) < int(settings["rotate_hold_sec"]),
+        "next_slot_at": waves["next_wave_at"] if stagger else clock["next_slot_at"],
         "poll_sec": 20,
         "reboot": modems_to_reboot(
             proxies, farm, modems, moment, int(settings["reboot_after_min"]), last_reboot, hold_until,
